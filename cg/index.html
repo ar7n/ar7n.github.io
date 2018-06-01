@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="RU">
+<head>
+    <title>Computer graphics</title>
+    <style>
+        body {
+            margin: 0;
+        }
+        canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="view"></canvas>
+    <div id="uiContainer">
+        <div id="ui">
+          <div id="fieldOfView"></div>
+          <div id="x"></div>
+          <div id="y"></div>
+          <div id="z"></div>
+          <div id="angleX"></div>
+          <div id="angleY"></div>
+          <div id="angleZ"></div>
+        </div>
+      </div>
+
+    <script id="3d-vertex-shader" type="x-shader/x-vertex">
+        attribute vec4 a_position;
+        attribute vec3 a_normal;
+        attribute vec2 a_texcoord;
+        
+        uniform vec3 u_lightWorldPosition;
+        uniform vec3 u_viewWorldPosition;
+        uniform mat4 u_worldViewProjection;
+        uniform mat4 u_worldInverseTranspose;
+        uniform mat4 u_world;
+
+        varying vec3 v_normal;
+        varying vec3 v_surfaceToLight;
+        varying vec3 v_surfaceToView;
+        varying vec2 v_texcoord;
+
+        void main() {
+          // Умножаем координаты на матрицу
+          gl_Position = u_worldViewProjection * a_position;
+          
+          // Направляем нормали и передаём во фрагментный шейдер
+          v_normal = mat3(u_worldInverseTranspose) * a_normal;
+
+          // Вычисляем мировые координаты поверхности
+          vec3 surfaceWorldPosition = (u_world * a_position).xyz;
+
+          // вычисляем вектор от поверхности к источнику света
+          // и передаём его во фрагментный шейдер
+          v_surfaceToLight = u_lightWorldPosition - surfaceWorldPosition;
+
+          // вычисляем вектор от поверхности к наблюдателю
+          // и передаём его во фрагментный шейдер
+          v_surfaceToView = u_viewWorldPosition - surfaceWorldPosition;
+
+          // передаём текстурные координаты во фрагментный шейдер
+          v_texcoord = a_texcoord;
+        }
+    </script>
+
+    <script id="3d-fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+
+        // Passed in from the vertex shader.
+        varying vec3 v_normal;
+        varying vec3 v_surfaceToLight;
+        varying vec3 v_surfaceToView;
+        varying vec2 v_texcoord;
+
+        uniform vec4 u_color;
+        uniform float u_shininess;
+        uniform sampler2D u_texture;
+      
+        void main() {
+            // v_normal - это varying-переменная, которая интерполируется
+            // и поэтому не будет единичным вектором. Нормализуем
+            // переменную и получаем единичный вектор.
+            vec3 normal = normalize(v_normal);
+
+            vec3 surfaceToLightDirection = normalize(v_surfaceToLight);
+            vec3 surfaceToViewDirection = normalize(v_surfaceToView);
+            vec3 halfVector = normalize(surfaceToLightDirection + surfaceToViewDirection);
+
+            float light = dot(normal, surfaceToLightDirection);
+            float specular = 0.0;
+            if (light > 0.0) {
+                specular = pow(dot(normal, halfVector), u_shininess);
+            }
+          
+            gl_FragColor = texture2D(u_texture, v_texcoord);
+          
+            // Умножаем только значение цвета (без прозрачности)
+            // на значение света
+            gl_FragColor.rgb *= light;
+
+            // Просто добавляем блики
+            gl_FragColor.rgb += specular;
+        }
+    </script>
+
+    <script src="lib.js"></script>
+    <script src="geometry.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
